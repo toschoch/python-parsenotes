@@ -9,6 +9,10 @@ __pycache__/
 input/**.html
 input/**.jpg
 
+input/*.html
+input/*.jpg
+!input
+
 .idea/
 
 # Distribution / packaging
