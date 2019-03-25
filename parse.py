@@ -6,9 +6,11 @@
 import logging
 import glob
 import cssutils
+import validators
 import bs4
 from dateutil.parser import parse
 from datetime import datetime
+from turtlpy.client import TurtlClient
 
 log = logging.getLogger(__name__)
 
@@ -80,85 +82,113 @@ def parsePasswords(content):
 
     return passwords
 
-
-
 if __name__ == '__main__':
 
     logging.basicConfig(level=logging.INFO)
 
-    files = glob.glob("input/*.html")
+    with TurtlClient("http://<server-url>", "<username>", "<password>") as client:
 
-    log.info("found {} notes!".format(len(files)))
+        files = glob.glob("input/*.html")
 
-    now = datetime.now()
+        log.info("found {} notes!".format(len(files)))
 
-    for file in files:
-        log.info(file)
-        with open(file, mode='r', encoding='utf-8') as fp:
-            soup = bs4.BeautifulSoup(fp.read().replace('\n','').replace('- ','* '), "html.parser")
-        googDate = parse(soup.select('.heading')[0].getText().strip())
+        now = datetime.now()
 
-        # Get title
-        if len(soup.select('.title')) == 0:
-            title = ''
-        else:
-            title = soup.select('.title')[0].getText()
+        for file in files:
+            log.info(file)
+            with open(file, mode='r', encoding='utf-8') as fp:
+                soup = bs4.BeautifulSoup(fp.read().replace('\n','').replace('- ','* '), "html.parser")
+            googDate = int(parse(soup.select('.heading')[0].getText().strip()).timestamp())
 
-        # selectors = {}
-        # for styles in soup.select('style'):
-        #     css = cssutils.parseString(styles.encode_contents())
-        #     for rule in css:
-        #         if rule.type == rule.STYLE_RULE:
-        #             style = rule.selectorText
-        #             selectors[style] = {}
-        #             for item in rule.style:
-        #                 propertyname = item.name
-        #                 value = item.value
-        #                 selectors[style][propertyname] = value
+            # Get title
+            if len(soup.select('.title')) == 0:
+                title = ''
+            else:
+                title = soup.select('.title')[0].getText()
 
-        # Parse Content
-        body = soup.find("body")
-        note = next(body.children)
+            # selectors = {}
+            # for styles in soup.select('style'):
+            #     css = cssutils.parseString(styles.encode_contents())
+            #     for rule in css:
+            #         if rule.type == rule.STYLE_RULE:
+            #             style = rule.selectorText
+            #             selectors[style] = {}
+            #             for item in rule.style:
+            #                 propertyname = item.name
+            #                 value = item.value
+            #                 selectors[style][propertyname] = value
 
-        html = soup.select(".content")[0]
+            # Parse Content
+            body = soup.find("body")
+            note = next(body.children)
 
-
-        bullets = html.select(".bullet")
-        for bullet in bullets:
-            if bullet.get_text() == '☐':
-                bullet.replace_with("- [ ] ")
-            elif bullet.get_text() == '☑':
-                bullet.replace_with("- [x] ")
+            html = soup.select(".content")[0]
 
 
-        listitems = html.select(".listitem")
-        for listitem in listitems:
-            listitem.append('\n')
-            listitem.unwrap()
+            bullets = html.select(".bullet")
+            first = True
+            for bullet in bullets:
+                if bullet.get_text() == '☐':
+                    if first:
+                        bullet.replace_with(" - [ ] ")
+                        first = False
+                    else:
+                        bullet.replace_with("- [ ] ")
+                elif bullet.get_text() == '☑':
+                    bullet.replace_with("- [x] ")
 
 
-        tags = soup.select(".chips")
-        if len(tags) > 0:
-            tags = tags[0]
-            tags = tags.select(".chip.label")
-            tags = [tag.get_text() for tag in tags]
-        else:
-            tags = []
+            listitems = html.select(".listitem")
+            for listitem in listitems:
+                listitem.append('\n')
+                listitem.unwrap()
 
 
-        # Convert linebreaks
-        for br in soup.find_all("br"):
-            br.replace_with("\n")
+            tags = soup.select(".chips")
+            if len(tags) > 0:
+                tags = tags[0]
+                tags = tags.select(".chip.label")
+                tags = [tag.get_text() for tag in tags]
+            else:
+                tags = []
 
-        content = html.getText()
 
-        log.info("Title: {}".format(title))
-        log.info("Date: {}".format(googDate))
-        log.info("Tags: {}".format(tags))
+            # Convert linebreaks
+            for br in soup.find_all("br"):
+                br.replace_with("\n")
 
-        if title.lower().strip() == 'logins':
-            passwords = parsePasswords(content)
-            for pw in passwords:
-                log.info("--> {}".format(pw))
-        else:
-            log.info("Content: \n{}".format(content))
+            content = html.getText()
+
+            log.info("Title: {}".format(title))
+            log.info("Date: {}".format(googDate))
+            log.info("Tags: {}".format(tags))
+
+            if title.lower().strip() == 'logins':
+                passwords = parsePasswords(content)
+                for pw in passwords:
+                    log.warning("PASSWORD")
+                    log.info("--> {}".format(pw))
+                    board = client.get_board("Passwords")
+                    client.add_note(board.create_password(pw['title'], pw['pw'], pw['user'], pw['pw'],
+                                                          tags=["script", "password hint"], mod=googDate))
+            else:
+                lines = content.splitlines()
+                if len(lines)>0 and validators.url(lines[0]):
+                    url = lines[0]
+                    log.warning("BOOKMARK")
+                    log.info("--> {}".format(content))
+                    if title=="":
+                        title = url
+                    if len(lines)>1:
+                        text = "\n".join(lines[1:])
+                    else:
+                        text = ""
+                    board = client.get_board("Bookmarks")
+                    client.add_note(board.create_bookmark(title, text, url, tags=['script'], mod=googDate))
+
+                else:
+                    log.warning("TEXT")
+                    log.info("Content: \n{}".format(content))
+                    board = client.get_board("General")
+                    client.add_note(board.create_text_note(title,content,
+                                                           tags=['script'], mod=googDate))
