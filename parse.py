@@ -169,8 +169,10 @@ if __name__ == '__main__':
                     log.warning("PASSWORD")
                     log.info("--> {}".format(pw))
                     board = client.get_board("Passwords")
-                    client.add_note(board.create_password(pw['title'], pw['pw'], pw['user'], pw['pw'],
-                                                          tags=["script", "password hint"], mod=googDate))
+                    note = board.create_password(pw['title'], pw['pw'], pw['user'], pw['pw'],
+                                                          tags=["script", "password hint"])
+                    note.mod = googDate
+                    client.add_note(note)
             else:
                 lines = content.splitlines()
                 if len(lines)>0 and validators.url(lines[0]):
@@ -184,11 +186,14 @@ if __name__ == '__main__':
                     else:
                         text = ""
                     board = client.get_board("Bookmarks")
-                    client.add_note(board.create_bookmark(title, text, url, tags=['script'], mod=googDate))
+                    note = board.create_bookmark(title, text, url, tags=['script'])
+                    note.mod = googDate
+                    client.add_note(note)
 
                 else:
                     log.warning("TEXT")
                     log.info("Content: \n{}".format(content))
                     board = client.get_board("General")
-                    client.add_note(board.create_text_note(title,content,
-                                                           tags=['script'], mod=googDate))
+                    note = board.create_text_note(title,content, tags=['script'])
+                    note.mod = googDate
+                    client.add_note(note)
